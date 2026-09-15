@@ -1,69 +1,187 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { SparkleIcon } from "@/components/icons";
+import { ChatComposer } from "@/components/chat/ChatComposer";
+import { ChatMessage } from "@/components/chat/ChatMessage";
+import { UploadButton } from "@/components/chat/UploadButton";
+
+interface Message {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+}
 
 export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
+  const [file, setFile] = useState<File | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState("");
+  const [temperature, setTemperature] = useState(0.7);
+  const [isThinking, setIsThinking] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const hasStarted = messages.length > 0;
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [messages, isThinking]);
+
+  async function handleSend() {
+    const text = input.trim();
+    if (!text || !file) return;
+    const history = messages;
+    setMessages((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), role: "user", content: text },
+    ]);
+    setInput("");
+    setIsThinking(true);
+
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKENCD_URL}/chat`, {
+        method: "post",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: text,
+          history: history.map(({ role, content }) => ({ role, content })),
+          temperature,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`Something went wrong ${res.status}`);
+
+      const data = await res.json();
+      console.log({ data });
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: data.answer,
+        },
+      ]);
+
+      console.log({ messages });
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: `Something went wrong`,
+        },
+      ]);
+      console.log({ errmessages: messages });
+    } finally {
+      setIsThinking(false);
+      console.log({ finally: messages });
+    }
+  }
+
+  async function handleFileUpload(selectedFile: File) {
+    setFile(selectedFile);
+    setIsUploading((prevValue) => {
+      prevValue = true;
+      return prevValue;
+    });
+
+    const formdata = new FormData();
+    formdata.append("file", selectedFile);
+
+    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKENCD_URL}/upload`, {
+      method: "POST",
+      body: formdata,
+    });
+
+    if (!res.ok) {
+      setIsUploading((prevValue) => {
+        prevValue = false;
+        return prevValue;
+      });
+      setFile(null);
+      throw new Error("Failed to upload file");
+    }
+    const data = await res.json();
+    console.log("File uploaded successfully:", data);
+    setIsUploading((prevValue) => {
+      prevValue = false;
+      return prevValue;
+    });
+  }
+
+  if (!hasStarted) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-8 px-4">
+        <div className="flex items-center gap-3">
+          <SparkleIcon className="h-8 w-8 text-accent" />
+          <h1 className="font-serif text-3xl text-text-primary sm:text-4xl">
+            {file ? "Ask away" : "Upload a document to begin"}
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+        </div>
+        <div className="flex w-full max-w-2xl flex-col items-center gap-4">
+          <UploadButton
+            file={file}
+            isUploading={isUploading}
+            onFileSelect={handleFileUpload}
+          />
+          <ChatComposer
+            value={input}
+            onChange={setInput}
+            onSend={handleSend}
+            temperature={temperature}
+            onTemperatureChange={setTemperature}
+            disabled={!file && !isUploading}
+            placeholder={
+              file
+                ? "Ask something about your document..."
+                : "Upload a document to start chatting"
+            }
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <header className="flex items-center justify-between border-b border-border px-6 py-4">
+        <div className="flex items-center gap-2 text-text-primary">
+          <SparkleIcon className="h-5 w-5 text-accent" />
+          <span className="text-sm font-medium">{file?.name}</span>
+        </div>
+      </header>
+
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-6 py-8">
+        <div className="mx-auto flex max-w-3xl flex-col gap-6">
+          {messages.map((m) => (
+            <ChatMessage key={m.id} role={m.role} content={m.content} />
+          ))}
+          {isThinking && (
+            <ChatMessage role="assistant" content="Thinking..." pending />
+          )}
+        </div>
+      </div>
+
+      <div className="border-t border-border px-6 py-4">
+        <div className="mx-auto max-w-3xl">
+          <ChatComposer
+            value={input}
+            onChange={setInput}
+            onSend={handleSend}
+            temperature={temperature}
+            onTemperatureChange={setTemperature}
+            placeholder="Write a message..."
+          />
+          <p className="mt-2 text-center text-xs text-text-muted">
+            AI can make mistakes. Please double-check responses.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      </div>
     </div>
   );
 }
