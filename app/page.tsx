@@ -16,7 +16,6 @@ export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [temperature, setTemperature] = useState(0.7);
   const [isThinking, setIsThinking] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -48,7 +47,6 @@ export default function Home() {
         body: JSON.stringify({
           message: text,
           history: history.map(({ role, content }) => ({ role, content })),
-          temperature,
         }),
       });
 
@@ -133,8 +131,6 @@ export default function Home() {
             value={input}
             onChange={setInput}
             onSend={handleSend}
-            temperature={temperature}
-            onTemperatureChange={setTemperature}
             disabled={!file && !isUploading}
             placeholder={
               file
@@ -173,8 +169,6 @@ export default function Home() {
             value={input}
             onChange={setInput}
             onSend={handleSend}
-            temperature={temperature}
-            onTemperatureChange={setTemperature}
             placeholder="Write a message..."
           />
           <p className="mt-2 text-center text-xs text-text-muted">
